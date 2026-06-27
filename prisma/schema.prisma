@@ -1,0 +1,392 @@
+// Prisma schema for the WhatsApp API Reseller Console Platform.
+// Dev datasource: SQLite (file). Prod: swap provider to "postgresql" + DATABASE_URL.
+// All secret fields (*Encrypted) hold ciphertext produced by src/lib/crypto.ts (AES-256-GCM).
+// Never store plaintext tokens/secrets here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = env("DB_PROVIDER") // "sqlite" | "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Core actors ----------
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@map("admins")
+}
+
+model Client {
+  id          String       @id @default(cuid())
+  name        String
+  companyName String?
+  email       String       @unique
+  phone       String?
+  status      ClientStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  whatsappAccounts WhatsAppAccount[]
+  subscriptions    Subscription[]
+  invoices         Invoice[]
+  contacts         Contact[]
+  apiKeys          ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
+
+  @@map("clients")
+}
+
+enum ClientStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+// ---------- WhatsApp provisioning ----------
+
+model WhatsAppAccount {
+  id        String @id @default(cuid())
+  clientId  String
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  provider  WhatsAppProviderType @default(CLOUD_API)
+
+  // Meta WhatsApp Cloud API identifiers (see WhatsAppProvider interface for version notes).
+  wabaId              String
+  phoneNumberId       String  @unique
+  displayPhoneNumber  String?
+  verifiedName        String?
+
+  // Encrypted secrets — ciphertext only.
+  accessTokenEncrypted        String
+  webhookVerifyTokenEncrypted String
+  appSecretEncrypted          String?
+
+  status          AccountStatus @default(PENDING)
+  healthStatus    HealthStatus  @default(UNKNOWN)
+  lastHealthCheckAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions  Subscription[]
+  usageRecords   UsageRecord[]
+  messages       Message[]
+  templates      Template[]
+  contacts       Contact[]
+
+  @@map("whatsapp_accounts")
+}
+
+enum WhatsAppProviderType {
+  CLOUD_API
+  MOCK
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  DEPROVISIONED
+}
+
+enum HealthStatus {
+  UNKNOWN
+  HEALTHY
+  UNHEALTHY
+}
+
+// ---------- Billing ----------
+
+model Plan {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  priceCents          Int
+  currency            String   @default("USD")
+  messageQuota        Int
+  rateLimitPerSecond  Int      @default(10)
+  maxWhatsAppAccounts Int      @default(1)
+  featureFlagsJson    String   @default("{}")
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id        String             @id @default(cuid())
+  clientId  String
+  client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      Plan               @relation(fields: [planId], references: [id])
+
+  // Primary account this subscription meters; a client can have multiple
+  // accounts but billing/quota is tracked per subscription-account pair.
+  whatsappAccountId String?
+  whatsappAccount   WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id])
+
+  status        SubscriptionStatus @default(ACTIVE)
+  startDate     DateTime           @default(now())
+  renewalDate   DateTime
+  cancelledAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  invoices     Invoice[]
+  usageRecords UsageRecord[]
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id])
+
+  periodStart DateTime
+  periodEnd   DateTime
+  amountCents Int
+  currency    String        @default("USD")
+  status      InvoiceStatus @default(DRAFT)
+  issuedAt    DateTime?
+  dueAt       DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  payments Payment[]
+
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  OVERDUE
+  VOID
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  invoiceId String
+  invoice   Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  amountCents Int
+  currency    String        @default("USD")
+  method      String        // e.g. "manual", "stripe", "razorpay"
+  provider    String        // PaymentProvider implementation key
+  status      PaymentStatus @default(PENDING)
+  reference   String?       // external transaction id / note
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model UsageRecord {
+  id                String          @id @default(cuid())
+  whatsappAccountId String
+  whatsappAccount   WhatsAppAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  subscriptionId    String?
+  subscription      Subscription?   @relation(fields: [subscriptionId], references: [id])
+
+  cycleStart      DateTime
+  cycleEnd        DateTime
+  messagesSent    Int      @default(0)
+  messagesReceived Int     @default(0)
+  overageFlag     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([whatsappAccountId, cycleStart])
+  @@map("usage_records")
+}
+
+// ---------- Messaging ----------
+
+model Message {
+  id                String          @id @default(cuid())
+  whatsappAccountId String
+  whatsappAccount   WhatsAppAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+
+  direction   MessageDirection
+  waMessageId String?           @unique // Meta's wamid, null until acked for outbound
+  fromNumber  String
+  toNumber    String
+  type        String            // text | image | video | document | audio | location | contacts | interactive | template
+  contentJson String            // raw payload (sanitized) for replay/audit
+  status      MessageStatus     @default(QUEUED)
+  templateId  String?
+  template    Template?         @relation(fields: [templateId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([whatsappAccountId, createdAt])
+  @@map("messages")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Template {
+  id                String          @id @default(cuid())
+  whatsappAccountId String
+  whatsappAccount   WhatsAppAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+
+  name       String
+  language   String
+  category   String         // MARKETING | UTILITY | AUTHENTICATION (Meta categories)
+  status     TemplateStatus @default(PENDING)
+  bodyJson   String         // component structure as submitted to Meta
+  metaTemplateId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+
+  @@unique([whatsappAccountId, name, language])
+  @@map("templates")
+}
+
+enum TemplateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DISABLED
+}
+
+// ---------- Audience ----------
+
+model Contact {
+  id                String           @id @default(cuid())
+  clientId          String
+  client            Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  whatsappAccountId String?
+  whatsappAccount   WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id])
+
+  phoneNumber   String
+  name          String?
+  optInStatus   OptInStatus @default(UNKNOWN)
+  optInAt       DateTime?
+  optOutAt      DateTime?
+  tagsJson      String      @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, phoneNumber])
+  @@map("contacts")
+}
+
+enum OptInStatus {
+  UNKNOWN
+  OPTED_IN
+  OPTED_OUT
+}
+
+// ---------- Public API access ----------
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  prefix     String   // first chars shown in CLI/UI, e.g. "wac_live_ab12"
+  keyHash    String   // sha256 of the full secret key — never store plaintext
+  scopesJson String   @default("[\"*\"]")
+  status     ApiKeyStatus @default(ACTIVE)
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@map("api_keys")
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+}
+
+model WebhookEndpoint {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  url        String
+  secret     String   // used to sign outbound payloads (HMAC) to the CRM
+  eventsJson String   @default("[\"*\"]") // e.g. message.inbound, message.status, account.suspended
+  status     WebhookEndpointStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("webhook_endpoints")
+}
+
+enum WebhookEndpointStatus {
+  ACTIVE
+  DISABLED
+}
+
+// ---------- Audit ----------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorType  String   // "admin" | "api_key" | "system"
+  actorId    String?
+  adminId    String?
+  admin      Admin?   @relation(fields: [adminId], references: [id])
+
+  action       String  // e.g. "client.create", "account.suspend"
+  targetType   String?
+  targetId     String?
+  metadataJson String  @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("audit_log")
+}
