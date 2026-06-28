@@ -12,6 +12,7 @@
     "cli": "ts-node src/cli/index.ts",
     "api": "ts-node src/api/server.ts",
     "dev:api": "ts-node-dev --respawn --transpile-only src/api/server.ts",
+    "webhook": "ts-node src/webhooks/server.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
