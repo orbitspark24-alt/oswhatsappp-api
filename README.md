@@ -4,7 +4,7 @@ A console-driven platform for provisioning, metering, and billing **WhatsApp Bus
 
 ## Status
 
-🚧 Under active build-out. See "Build order" below for what exists vs. what's next.
+✅ All 8 build steps complete. Provisioning, billing, messaging, templates, webhooks, the public REST API, the event bus / outbound CRM webhooks, broadcasts, analytics, tests, and Docker packaging are in place. The WhatsApp Cloud API adapter has been verified live against a real Meta test number.
 
 ## Stack
 
@@ -114,16 +114,81 @@ curl -X POST http://localhost:3000/api/v1/messages \
 
 Inbound messages and status updates are pushed to the CRM's registered `WebhookEndpoint` URL, HMAC-signed with the endpoint's secret. Full request/response examples will be added alongside the OpenAPI spec in step 6.
 
-## Build order (tracking)
+## CLI command groups
 
-1. [x] Project scaffold, config, DB schema/migrations, `.env.example`, README — **this commit**
-2. [ ] `WhatsAppProvider` interface + Cloud API adapter + mock provider
-3. [ ] CLI core + module registry + `client`/`account` commands
-4. [ ] Plans, subscriptions, invoices, usage metering, manual `PaymentProvider`, billing commands
-5. [ ] Messaging + templates + webhook receiver + conversation log
-6. [ ] Public REST API with per-client API keys + OpenAPI spec
-7. [ ] Outbound webhooks/event bus, bulk/broadcast rate limiting, analytics
-8. [ ] Tests, Dockerfile, deployment README
+Run `npm run cli -- <group> --help` for details.
+
+| Group | What it does |
+|---|---|
+| `client` | CRUD + suspend/activate reseller clients |
+| `account` | Provision, list, health-check, suspend/resume/deprovision WhatsApp accounts |
+| `billing` | Plans, subscriptions, invoices (`pay`), `run-cycle`, `enforce`, `usage` |
+| `message` | `send-text`, `send` (any type), conversation `log` |
+| `template` | `create`/`list`/`sync`/`send` message templates |
+| `webhook` | Inspect recent inbound, `simulate` a payload |
+| `apikey` | Issue/list/revoke/rotate per-client API keys |
+| `analytics` | Per-client dashboards + rate-limited `broadcast` |
+| `system` | `status`, registered `tools`, `audit` log |
+
+The command list is not hard-coded: each group is a self-registering `Tool` module in
+[src/cli/commands/](src/cli/commands/), auto-discovered at startup. Drop in a new `*Command.ts`
+that calls `registerTool(...)` and it appears in the CLI with no core changes.
+
+## Public API reference (for the CRM)
+
+Base URL `…/api/v1`, auth header `Authorization: Bearer wac_live_...`. Full schema at `/docs`.
+
+| Method & path | Scope | Purpose |
+|---|---|---|
+| `POST /messages` | `messages:write` | Send a message (any type) |
+| `GET /messages?accountId=` | `messages:read` | Conversation log |
+| `GET /templates?accountId=` · `POST /templates` | `templates:read/write` | List / create templates |
+| `POST /templates/:id/send` | `messages:write` | Send an approved template |
+| `GET /contacts` · `POST /contacts` · `POST /contacts/:phone/opt` | `contacts:read/write` | Audience + opt-in/out |
+| `GET /accounts` · `GET /usage?accountId=` | `accounts:read` / `usage:read` | Accounts + quota |
+| `GET /billing/invoices` | `billing:read` | Invoices |
+| `GET /webhooks` · `POST /webhooks` | `webhooks:read/write` | Register CRM callback URL |
+| `GET /analytics` · `POST /broadcasts` | `analytics:read` / `messages:write` | Dashboards + bulk send |
+
+Outbound events delivered to a registered callback URL are POSTed with headers
+`X-WAC-Event` and `X-WAC-Signature-256: sha256=<hmac>` (HMAC of the raw body using the
+endpoint secret returned at registration). Events: `message.inbound`, `message.status`,
+`message.sent`, `invoice.created`, `invoice.paid`, `account.suspended`, `subscription.suspended`.
+
+## Testing
+
+```bash
+npm test          # vitest: unit (crypto, billing dates, scopes) + integration (services + API)
+```
+
+Tests run against an isolated SQLite file (`test/test.db`, recreated each run); no external services needed.
+
+## Docker / deployment
+
+Local dev uses SQLite. For a production-like stack (API + PostgreSQL + Redis):
+
+```bash
+# 1. In .env set DB_PROVIDER=postgresql and a postgres DATABASE_URL; provide ENCRYPTION_KEY + Meta vars.
+# 2. In prisma/schema.prisma change datasource provider to "postgresql".
+docker compose up --build -d
+docker compose run --rm api npx prisma migrate deploy   # apply migrations
+docker compose run --rm api node dist/cli/index.js system status   # run the CLI in-container
+```
+
+The image's default command runs the public API (which also serves the Meta webhook routes).
+Point your Meta App's webhook callback URL at `https://<host>/webhooks/whatsapp` with the
+verify token from `META_WEBHOOK_VERIFY_TOKEN_DEFAULT`.
+
+## Build order (all complete)
+
+1. [x] Project scaffold, config, DB schema/migrations, `.env.example`, README
+2. [x] `WhatsAppProvider` interface + Cloud API adapter + mock provider
+3. [x] CLI core + module registry + `client`/`account` commands
+4. [x] Plans, subscriptions, invoices, usage metering, manual `PaymentProvider`, billing commands
+5. [x] Messaging + templates + webhook receiver + conversation log
+6. [x] Public REST API with per-client API keys + OpenAPI spec
+7. [x] Outbound webhooks/event bus, bulk/broadcast rate limiting, analytics
+8. [x] Tests, Dockerfile, deployment README
 
 ## Security notes
 

@@ -1,0 +1,53 @@
+# Production-like stack: API + PostgreSQL + Redis.
+# For local dev you can skip this and use SQLite (npm run dev:api).
+#
+# Before first run with Postgres, set DB_PROVIDER=postgresql and the postgres DATABASE_URL
+# in .env, change prisma/schema.prisma datasource provider to "postgresql", then run
+# migrations inside the container: docker compose run --rm api npx prisma migrate deploy
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wac
+      POSTGRES_PASSWORD: wac
+      POSTGRES_DB: wac
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wac"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DB_PROVIDER: postgresql
+      DATABASE_URL: postgresql://wac:wac@db:5432/wac?schema=public
+      REDIS_URL: redis://redis:6379
+      API_HOST: 0.0.0.0
+      API_PORT: "3000"
+      # Provide these via an .env file or your secrets manager in real deployments:
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      META_APP_ID: ${META_APP_ID}
+      META_APP_SECRET: ${META_APP_SECRET}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v22.0}
+      META_WEBHOOK_VERIFY_TOKEN_DEFAULT: ${META_WEBHOOK_VERIFY_TOKEN_DEFAULT}
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
