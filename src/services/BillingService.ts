@@ -5,6 +5,7 @@ import { AccountService } from "./AccountService";
 import { getPaymentProvider } from "../providers/payment";
 import { addMonths, currentPeriod, Period } from "../lib/billingDates";
 import { audit } from "../lib/audit";
+import { eventBus } from "../events/EventBus";
 import { NotFoundError, ServiceError, ConflictError } from "./errors";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -39,6 +40,11 @@ export const BillingService = {
       targetType: "invoice",
       targetId: invoice.id,
       metadata: { subscriptionId, amountCents: invoice.amountCents, periodStart: p.start },
+    });
+    eventBus.emit("invoice.created", {
+      clientId: subscription.clientId,
+      invoiceId: invoice.id,
+      amountCents: invoice.amountCents,
     });
     return invoice;
   },
@@ -111,6 +117,7 @@ export const BillingService = {
       targetId: invoiceId,
       metadata: { provider: providerKey, amountCents: invoice.amountCents },
     });
+    eventBus.emit("invoice.paid", { clientId: invoice.clientId, invoiceId });
     return InvoiceRepository.findById(invoiceId);
   },
 
@@ -146,6 +153,7 @@ export const BillingService = {
             targetId: sub.id,
             metadata: { reason: "non_payment", invoiceId: invoice.id },
           });
+          eventBus.emit("subscription.suspended", { clientId: invoice.clientId, subscriptionId: sub.id });
         }
       } else if (sub.status === "ACTIVE") {
         await SubscriptionRepository.update(sub.id, { status: "PAST_DUE" });

@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { addRawBodyParser, registerMetaWebhookRoutes } from "./routes";
+import { initEventSubscribers } from "../events/subscribers";
 import { config } from "../config";
 import { logger } from "../lib/logger";
 
@@ -7,6 +8,7 @@ import { logger } from "../lib/logger";
 // (src/api/server.ts); this entrypoint keeps them runnable on their own.
 export function buildWebhookServer() {
   const app = Fastify({ logger: false });
+  initEventSubscribers();
   addRawBodyParser(app);
   registerMetaWebhookRoutes(app);
   app.get("/health", async () => ({ ok: true }));

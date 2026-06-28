@@ -5,8 +5,10 @@ import { ZodError } from "zod";
 import { config } from "../config";
 import { logger } from "../lib/logger";
 import { ServiceError } from "../services/errors";
+import { initEventSubscribers } from "../events/subscribers";
 import { addRawBodyParser, registerMetaWebhookRoutes } from "../webhooks/routes";
 import { registerMessageRoutes } from "./routes/messages";
+import { registerAnalyticsRoutes } from "./routes/analytics";
 import { registerTemplateRoutes } from "./routes/templates";
 import { registerContactRoutes } from "./routes/contacts";
 import { registerAccountRoutes } from "./routes/account";
@@ -17,6 +19,9 @@ import { registerWebhookEndpointRoutes } from "./routes/webhookEndpoints";
 // stay in sync. Secured with per-client API keys (Authorization: Bearer wac_live_...).
 export async function buildApiServer(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+
+  // Wire domain events to outbound CRM webhook delivery.
+  initEventSubscribers();
 
   addRawBodyParser(app);
 
@@ -59,6 +64,7 @@ export async function buildApiServer(): Promise<FastifyInstance> {
   registerAccountRoutes(app);
   registerBillingRoutes(app);
   registerWebhookEndpointRoutes(app);
+  registerAnalyticsRoutes(app);
 
   app.get("/health", { schema: { tags: ["system"], summary: "Health check" } }, async () => ({ ok: true }));
 

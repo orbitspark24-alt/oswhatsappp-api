@@ -3,6 +3,7 @@ import { AccountService } from "./AccountService";
 import { UsageService } from "./UsageService";
 import { getWhatsAppProvider, WhatsAppMessageType } from "../providers/whatsapp";
 import { audit } from "../lib/audit";
+import { eventBus } from "../events/EventBus";
 import { ServiceError } from "./errors";
 
 export interface SendInput {
@@ -72,6 +73,14 @@ export const MessageService = {
     if (!result.success) {
       throw new ServiceError(`Send failed: ${result.error ?? "unknown error"}`);
     }
+
+    eventBus.emit("message.sent", {
+      clientId: account.clientId,
+      accountId,
+      messageId: message.id,
+      to: input.to,
+      type: input.type,
+    });
     return message;
   },
 

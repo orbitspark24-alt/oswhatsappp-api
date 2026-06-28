@@ -6,6 +6,7 @@ import { getWhatsAppProvider, WhatsAppAccountCredentials } from "../providers/wh
 import { encrypt, decrypt } from "../lib/crypto";
 import { config } from "../config";
 import { audit } from "../lib/audit";
+import { eventBus } from "../events/EventBus";
 import { ConflictError, NotFoundError, ServiceError } from "./errors";
 
 export const ProvisionAccountInput = z.object({
@@ -121,6 +122,9 @@ export const AccountService = {
       targetType: "whatsapp_account",
       targetId: id,
     });
+    if (status === "SUSPENDED") {
+      eventBus.emit("account.suspended", { clientId: account.clientId, accountId: id });
+    }
     return account;
   },
 

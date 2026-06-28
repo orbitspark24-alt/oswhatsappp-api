@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma";
 import { MessageRepository } from "../repositories/MessageRepository";
 import { WhatsAppAccountRepository } from "../repositories/WhatsAppAccountRepository";
 import { UsageService } from "./UsageService";
+import { eventBus } from "../events/EventBus";
 import { config } from "../config";
 import { logger } from "../lib/logger";
 
@@ -71,7 +72,7 @@ export const WebhookService = {
           const existing = msg.id ? await MessageRepository.findByWaMessageId(msg.id) : null;
           if (existing) continue;
 
-          await MessageRepository.create({
+          const created = await MessageRepository.create({
             whatsappAccount: { connect: { id: account.id } },
             direction: "INBOUND",
             waMessageId: msg.id,
@@ -82,6 +83,14 @@ export const WebhookService = {
             status: "DELIVERED",
           });
           await UsageService.recordMessage(account.id, "INBOUND").catch(() => undefined);
+          eventBus.emit("message.inbound", {
+            clientId: account.clientId,
+            accountId: account.id,
+            messageId: created.id,
+            from: msg.from ?? "unknown",
+            type: msg.type ?? "unknown",
+            content: msg,
+          });
           inbound++;
         }
 
@@ -90,6 +99,12 @@ export const WebhookService = {
           const mapped = STATUS_MAP[st.status ?? ""] ?? null;
           if (mapped && st.id) {
             await MessageRepository.updateStatus(st.id, mapped);
+            eventBus.emit("message.status", {
+              clientId: account.clientId,
+              accountId: account.id,
+              waMessageId: st.id,
+              status: mapped,
+            });
             statuses++;
           }
         }
