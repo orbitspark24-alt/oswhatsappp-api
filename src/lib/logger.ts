@@ -1,0 +1,23 @@
+import pino from "pino";
+import { config } from "../config";
+
+export const logger = pino({
+  level: config.logLevel,
+  transport:
+    process.env.NODE_ENV === "production"
+      ? undefined
+      : { target: "pino-pretty", options: { colorize: true, translateTime: "HH:MM:ss" } },
+  redact: {
+    paths: [
+      "accessToken",
+      "*.accessToken",
+      "appSecret",
+      "*.appSecret",
+      "webhookVerifyToken",
+      "*.webhookVerifyToken",
+      "authorization",
+      "req.headers.authorization",
+    ],
+    censor: "[REDACTED]",
+  },
+});
