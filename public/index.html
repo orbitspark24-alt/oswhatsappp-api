@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ORBIT WhatsApp Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- Login view -->
+  <div id="login" class="login-wrap">
+    <form class="login-card" id="loginForm">
+      <div class="brand-badge">💬</div>
+      <h1>ORBIT WhatsApp Console</h1>
+      <p>Admin sign in</p>
+      <label>Email</label>
+      <input id="email" type="email" value="admin@demo.local" />
+      <label>Password</label>
+      <input id="password" type="password" value="changeme" />
+      <button class="btn" style="width:100%; margin-top:18px;" type="submit">Sign in</button>
+      <div class="hint">Demo: admin@demo.local / changeme</div>
+    </form>
+  </div>
+
+  <!-- App shell -->
+  <div id="app" class="app hide">
+    <aside class="sidebar">
+      <div class="logo"><span class="dot">💬</span> ORBIT</div>
+      <button class="nav-item active" data-view="overview">📊 Dashboard</button>
+      <button class="nav-item" data-view="clients">👥 Clients</button>
+      <button class="nav-item" data-view="accounts">📱 WhatsApp Accounts</button>
+      <button class="nav-item" data-view="billing">💳 Billing</button>
+      <button class="nav-item" data-view="messaging">✉️ Messaging</button>
+      <button class="nav-item" data-view="analytics">📈 Analytics</button>
+      <button class="nav-item" data-view="apikeys">🔑 API Keys</button>
+      <div class="nav-spacer"></div>
+      <div class="who" id="whoami"></div>
+      <button class="nav-item" id="logoutBtn">⎋ Sign out</button>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <h2 id="viewTitle">Dashboard</h2>
+        <div class="who"><a href="/docs" target="_blank">API docs ↗</a></div>
+      </div>
+      <div id="view"></div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hide"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

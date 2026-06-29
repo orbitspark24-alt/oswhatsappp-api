@@ -1,6 +1,9 @@
+import path from "path";
 import Fastify, { FastifyInstance } from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import fastifyStatic from "@fastify/static";
+import fastifyCookie from "@fastify/cookie";
 import { ZodError } from "zod";
 import { config } from "../config";
 import { logger } from "../lib/logger";
@@ -14,6 +17,7 @@ import { registerContactRoutes } from "./routes/contacts";
 import { registerAccountRoutes } from "./routes/account";
 import { registerBillingRoutes } from "./routes/billing";
 import { registerWebhookEndpointRoutes } from "./routes/webhookEndpoints";
+import { registerAdminRoutes } from "../admin/routes";
 
 // Public REST API for the CRM. Mirrors the service layer the CLI uses, so console and CRM
 // stay in sync. Secured with per-client API keys (Authorization: Bearer wac_live_...).
@@ -24,6 +28,16 @@ export async function buildApiServer(): Promise<FastifyInstance> {
   initEventSubscribers();
 
   addRawBodyParser(app);
+
+  // Cookie support for the admin dashboard session.
+  await app.register(fastifyCookie);
+
+  // Serve the admin dashboard (public/) at the root. The compiled build runs from dist/,
+  // so resolve public/ relative to the project root in both ts-node and built modes.
+  await app.register(fastifyStatic, {
+    root: path.resolve(__dirname, "..", "..", "public"),
+    prefix: "/",
+  });
 
   // OpenAPI spec + Swagger UI so the CRM can be built against a generated contract.
   await app.register(swagger, {
@@ -65,6 +79,9 @@ export async function buildApiServer(): Promise<FastifyInstance> {
   registerBillingRoutes(app);
   registerWebhookEndpointRoutes(app);
   registerAnalyticsRoutes(app);
+
+  // Admin dashboard JSON API (session-cookie auth) backing the static UI at "/".
+  registerAdminRoutes(app);
 
   app.get("/health", { schema: { tags: ["system"], summary: "Health check" } }, async () => ({ ok: true }));
 
