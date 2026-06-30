@@ -82,7 +82,9 @@ export const TemplateService = {
     return t;
   },
 
-  // Pull approval statuses from Meta and reconcile local rows.
+  // Pull templates from Meta: reconcile statuses of known templates AND import any that
+  // exist on the WABA but not yet locally (e.g. the pre-approved hello_world template), so
+  // they become sendable from the console/UI.
   async syncStatuses(accountId: string) {
     const account = await AccountService.getById(accountId);
     const provider = getWhatsAppProvider(account.provider);
@@ -91,9 +93,23 @@ export const TemplateService = {
     if (error) throw new ServiceError(`Failed to fetch templates: ${error}`);
 
     let updated = 0;
+    let imported = 0;
     for (const remote of templates) {
       const local = await TemplateRepository.findByName(accountId, remote.name, remote.language);
-      if (local && local.status !== remote.status) {
+      if (!local) {
+        // Import. Body components aren't returned by the list call, so store an empty set —
+        // variable-less templates (like hello_world) send fine; re-create locally to add vars.
+        await TemplateRepository.create({
+          whatsappAccount: { connect: { id: accountId } },
+          name: remote.name,
+          language: remote.language,
+          category: remote.category ?? "UTILITY",
+          status: remote.status,
+          bodyJson: "[]",
+          metaTemplateId: remote.metaTemplateId,
+        });
+        imported++;
+      } else if (local.status !== remote.status) {
         await TemplateRepository.update(local.id, {
           status: remote.status,
           metaTemplateId: remote.metaTemplateId ?? local.metaTemplateId,
@@ -101,7 +117,7 @@ export const TemplateService = {
         updated++;
       }
     }
-    return { fetched: templates.length, updated };
+    return { fetched: templates.length, updated, imported };
   },
 
   // Send an approved template message, substituting body variables in order.

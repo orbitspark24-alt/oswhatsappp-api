@@ -340,7 +340,7 @@ views.templates = async () => {
       toast("Template created & submitted"); $("#t_lacct").value = $("#t_acct").value; loadTpls($("#t_acct").value);
     } catch (e) { toast(e.message, true); }
   };
-  $("#t_sync").onclick = async () => { try { const r = await api("/templates/sync", { method: "POST", body: { accountId: $("#t_acct").value } }); toast(`Synced — ${r.updated} updated`); loadTpls($("#t_acct").value); } catch (e) { toast(e.message, true); } };
+  $("#t_sync").onclick = async () => { try { const r = await api("/templates/sync", { method: "POST", body: { accountId: $("#t_acct").value } }); toast(`Synced — ${r.imported} imported, ${r.updated} updated`); loadTpls($("#t_acct").value); } catch (e) { toast(e.message, true); } };
   $("#t_load").onclick = () => loadTpls($("#t_lacct").value);
   if (accounts.length) loadTpls(accounts[0].id);
 };
