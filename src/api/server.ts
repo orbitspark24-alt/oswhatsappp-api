@@ -8,6 +8,7 @@ import { ZodError } from "zod";
 import { config } from "../config";
 import { logger } from "../lib/logger";
 import { ServiceError } from "../services/errors";
+import { ensureBootstrap } from "../lib/bootstrap";
 import { initEventSubscribers } from "../events/subscribers";
 import { addRawBodyParser, registerMetaWebhookRoutes } from "../webhooks/routes";
 import { registerMessageRoutes } from "./routes/messages";
@@ -93,7 +94,8 @@ export async function buildApiServer(): Promise<FastifyInstance> {
 }
 
 if (require.main === module) {
-  buildApiServer()
+  ensureBootstrap()
+    .then(() => buildApiServer())
     .then((app) =>
       app.listen({ port: config.api.port, host: config.api.host }).then(() => {
         logger.info(`API listening on ${config.api.host}:${config.api.port} (docs at /docs)`);

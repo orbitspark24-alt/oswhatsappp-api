@@ -36,6 +36,6 @@ COPY prisma ./prisma
 
 EXPOSE 3000
 
-# Default: run the public API (which also mounts the Meta webhook routes).
+# Apply DB migrations, then run the public API (which also mounts the Meta webhook routes).
 # Override the command to run the CLI or the standalone webhook server.
-CMD ["node", "dist/api/server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/api/server.js"]

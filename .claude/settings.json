@@ -14,7 +14,9 @@
       "Bash(npm install *)",
       "Bash(curl -s -b /tmp/pc.txt http://localhost:3000/portal/api/conversations/917000000001?accountId=__TRACKED_VAR__)",
       "Bash(npx ts-node *)",
-      "Bash(rm -rf __TRACKED_VAR__/edge-p3)"
+      "Bash(rm -rf __TRACKED_VAR__/edge-p3)",
+      "Bash(node -e \"console.log\\('ENCRYPTION_KEY suggestion:', require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\)\\)\")",
+      "Bash(node -e \"console.log\\('ADMIN_SESSION_SECRET suggestion:', require\\('crypto'\\).randomBytes\\(24\\).toString\\('hex'\\)\\)\")"
     ]
   }
 }

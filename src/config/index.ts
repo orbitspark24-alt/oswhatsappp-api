@@ -27,7 +27,8 @@ export const config = {
     defaultWebhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN_DEFAULT ?? "",
   },
   api: {
-    port: Number(process.env.API_PORT ?? 3000),
+    // Most PaaS hosts (Render, Railway, Fly, Heroku) inject the port via PORT — honor it first.
+    port: Number(process.env.PORT ?? process.env.API_PORT ?? 3000),
     host: process.env.API_HOST ?? "0.0.0.0",
     rateLimitMax: Number(process.env.API_RATE_LIMIT_MAX ?? 100),
     rateLimitWindowMs: Number(process.env.API_RATE_LIMIT_WINDOW_MS ?? 60000),

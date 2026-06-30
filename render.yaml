@@ -1,0 +1,44 @@
+# Render.com blueprint. Deploy: push this repo to GitHub, then in Render click
+# "New +" -> "Blueprint" and point it at the repo. Render reads this file.
+#
+# Uses SQLite on a persistent disk (mounted at /data) — simplest, no separate DB to manage.
+# A persistent disk requires a paid instance (Starter, ~$7/mo); the free tier has no disk and
+# spins down (losing the SQLite file). To stay on the free tier instead, use Render's free
+# PostgreSQL: set DB_PROVIDER=postgresql + DATABASE_URL to the Postgres URL, remove the disk,
+# and change prisma/schema.prisma datasource provider to "postgresql" (then regenerate migrations).
+
+services:
+  - type: web
+    name: orbit-whatsapp
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter # needed for the persistent disk below
+    healthCheckPath: /health
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DB_PROVIDER
+        value: sqlite
+      - key: DATABASE_URL
+        value: file:/data/prod.db
+      - key: META_GRAPH_API_VERSION
+        value: v22.0
+      # Secrets — set these in the Render dashboard (Environment tab). sync:false = not in git.
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: ADMIN_SESSION_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_WEBHOOK_VERIFY_TOKEN_DEFAULT
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
