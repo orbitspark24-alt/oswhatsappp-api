@@ -62,6 +62,20 @@ export const TemplateService = {
     return TemplateRepository.list(accountId);
   },
 
+  // Test affordance: approve a template locally so the send/broadcast flow can be exercised
+  // on MOCK accounts. Real (CLOUD_API) templates are approved by Meta — use syncStatuses().
+  async manualApprove(id: string) {
+    const template = await TemplateService.getById(id);
+    const account = await AccountService.getById(template.whatsappAccountId);
+    if (account.provider !== "MOCK") {
+      throw new ServiceError(
+        "Only MOCK-account templates can be approved manually; real templates are approved by Meta (use Sync).",
+        409
+      );
+    }
+    return TemplateRepository.update(id, { status: "APPROVED" });
+  },
+
   async getById(id: string) {
     const t = await TemplateRepository.findById(id);
     if (!t) throw new NotFoundError(`Template ${id} not found.`);

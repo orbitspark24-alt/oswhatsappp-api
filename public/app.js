@@ -64,13 +64,16 @@ function showApp(me) {
   $("#login").classList.add("hide");
   $("#app").classList.remove("hide");
   $("#whoami").textContent = `${me.name} · ${me.email}`;
-  navigate("overview");
+  // Support deep-linking to a view via ?view=... (falls back to the dashboard).
+  const wanted = new URLSearchParams(location.search).get("view");
+  navigate(views[wanted] ? wanted : "overview");
 }
 
 // ---------------- Navigation ----------------
 const titles = {
   overview: "Dashboard", clients: "Clients", accounts: "WhatsApp Accounts",
-  billing: "Billing", messaging: "Messaging", analytics: "Analytics", apikeys: "API Keys",
+  billing: "Billing", messaging: "Messaging", templates: "Templates",
+  broadcast: "Broadcast", analytics: "Analytics", apikeys: "API Keys",
 };
 document.querySelectorAll(".nav-item[data-view]").forEach((b) =>
   b.addEventListener("click", () => navigate(b.dataset.view))
@@ -112,9 +115,13 @@ views.clients = async () => {
     <td>${c.email}</td><td>${c.companyName || "—"}</td>
     <td>${badge(c.status)}</td>
     <td>${c._count?.whatsappAccounts ?? 0}</td>
-    <td>${c.status === "ACTIVE"
-      ? `<button class="btn tiny secondary" data-suspend="${c.id}">Suspend</button>`
-      : `<button class="btn tiny" data-activate="${c.id}">Activate</button>`}</td>
+    <td>
+      ${c.status === "ACTIVE"
+        ? `<button class="btn tiny secondary" data-suspend="${c.id}">Suspend</button>`
+        : `<button class="btn tiny" data-activate="${c.id}">Activate</button>`}
+      <button class="btn tiny secondary" data-edit='${JSON.stringify({ id: c.id, name: c.name, email: c.email, companyName: c.companyName || "" }).replace(/'/g, "&#39;")}'>Edit</button>
+      <button class="btn tiny danger" data-del="${c.id}" data-name="${c.name}">Delete</button>
+    </td>
   </tr>`).join("");
   $("#view").innerHTML = `
     <div class="panel"><h3>Add a client</h3>
@@ -137,6 +144,19 @@ views.clients = async () => {
   };
   document.querySelectorAll("[data-suspend]").forEach((b) => b.onclick = async () => { await api(`/clients/${b.dataset.suspend}/suspend`, { method: "POST" }); toast("Suspended"); navigate("clients"); });
   document.querySelectorAll("[data-activate]").forEach((b) => b.onclick = async () => { await api(`/clients/${b.dataset.activate}/activate`, { method: "POST" }); toast("Activated"); navigate("clients"); });
+  document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = async () => {
+    const c = JSON.parse(b.dataset.edit);
+    const name = prompt("Name", c.name); if (name === null) return;
+    const email = prompt("Email", c.email); if (email === null) return;
+    const companyName = prompt("Company", c.companyName); if (companyName === null) return;
+    try { await api(`/clients/${c.id}`, { method: "PATCH", body: { name, email, companyName } }); toast("Client updated"); navigate("clients"); }
+    catch (e) { toast(e.message, true); }
+  });
+  document.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+    if (!confirm(`Delete "${b.dataset.name}" and all their data? This cannot be undone.`)) return;
+    try { await api(`/clients/${b.dataset.del}`, { method: "DELETE" }); toast("Client deleted"); navigate("clients"); }
+    catch (e) { toast(e.message, true); }
+  });
 };
 
 views.accounts = async () => {
@@ -152,6 +172,7 @@ views.accounts = async () => {
       ${a.status === "SUSPENDED"
         ? `<button class="btn tiny secondary" data-resume="${a.id}">Resume</button>`
         : `<button class="btn tiny secondary" data-suspend="${a.id}">Suspend</button>`}
+      ${a.status !== "DEPROVISIONED" ? `<button class="btn tiny danger" data-deprov="${a.id}">Deprovision</button>` : ""}
     </td>
   </tr>`).join("");
   $("#view").innerHTML = `
@@ -188,6 +209,11 @@ views.accounts = async () => {
   });
   document.querySelectorAll("[data-suspend]").forEach((b) => b.onclick = async () => { await api(`/accounts/${b.dataset.suspend}/suspend`, { method: "POST" }); toast("Suspended"); navigate("accounts"); });
   document.querySelectorAll("[data-resume]").forEach((b) => b.onclick = async () => { await api(`/accounts/${b.dataset.resume}/resume`, { method: "POST" }); toast("Resumed"); navigate("accounts"); });
+  document.querySelectorAll("[data-deprov]").forEach((b) => b.onclick = async () => {
+    if (!confirm("Deprovision this account? It will stop sending/receiving.")) return;
+    try { await api(`/accounts/${b.dataset.deprov}/deprovision`, { method: "POST" }); toast("Deprovisioned"); navigate("accounts"); }
+    catch (e) { toast(e.message, true); }
+  });
 };
 
 views.billing = async () => {
@@ -265,6 +291,96 @@ views.messaging = async () => {
   $("#l_load").onclick = () => loadLog($("#l_acct").value);
 };
 
+views.templates = async () => {
+  const { data: accounts } = await api("/accounts");
+  const opts = accounts.map((a) => `<option value="${a.id}">${a.phoneNumberId} (${a.client?.name || ""}) · ${a.provider}</option>`).join("");
+  $("#view").innerHTML = `
+    <div class="panel"><h3>Create a template</h3>
+      <div class="row">
+        <div><label>Account</label><select id="t_acct">${opts}</select></div>
+        <div><label>Name</label><input id="t_name" placeholder="order_update"></div>
+        <div><label>Language</label><input id="t_lang" value="en_US"></div>
+        <div><label>Category</label><select id="t_cat"><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select></div>
+      </div>
+      <label>Body text (use {{1}}, {{2}} for variables)</label>
+      <textarea id="t_body" rows="2" placeholder="Your order {{1}} is {{2}}."></textarea>
+      <div style="margin-top:12px"><button class="btn" id="t_create">Create &amp; submit</button>
+      <button class="btn secondary" id="t_sync">Sync status from Meta</button></div>
+      <div class="hint">On MOCK accounts, use “Approve (test)” to mark a template APPROVED so you can send it. Real templates are approved by Meta — use Sync.</div>
+    </div>
+    <div class="panel"><h3>Templates</h3>
+      <div class="row" style="margin-bottom:12px"><div><label>Account</label><select id="t_lacct">${opts}</select></div><div style="flex:0;align-self:flex-end"><button class="btn secondary" id="t_load">Load</button></div></div>
+      <div id="tplBox"><div class="muted">Pick an account and load.</div></div>
+    </div>`;
+  async function loadTpls(accountId) {
+    const { data } = await api(`/templates?accountId=${accountId}`);
+    const rows = data.map((t) => `<tr>
+      <td>${t.name}<div class="muted mono">${t.language} · ${t.category}</div></td>
+      <td>${badge(t.status)}</td>
+      <td>
+        ${t.status !== "APPROVED" ? `<button class="btn tiny secondary" data-approve="${t.id}">Approve (test)</button>` : ""}
+        ${t.status === "APPROVED" ? `<button class="btn tiny" data-tsend="${t.id}" data-tname="${t.name}">Send</button>` : ""}
+      </td></tr>`).join("");
+    $("#tplBox").innerHTML = `<table><thead><tr><th>Template</th><th>Status</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan=3 class="muted">No templates</td></tr>`}</tbody></table>`;
+    document.querySelectorAll("[data-approve]").forEach((b) => b.onclick = async () => { try { await api(`/templates/${b.dataset.approve}/approve`, { method: "POST" }); toast("Approved (test)"); loadTpls(accountId); } catch (e) { toast(e.message, true); } });
+    document.querySelectorAll("[data-tsend]").forEach((b) => b.onclick = async () => {
+      const to = prompt(`Send "${b.dataset.tname}" to (E.164, no +):`); if (!to) return;
+      const vars = prompt('Variables as JSON array (e.g. ["#A1","shipped"]) or leave blank', "[]");
+      try { const m = await api(`/templates/${b.dataset.tsend}/send`, { method: "POST", body: { to, variables: JSON.parse(vars || "[]") } }); toast(`Sent (${m.status})`); }
+      catch (e) { toast(e.message, true); }
+    });
+  }
+  $("#t_create").onclick = async () => {
+    try {
+      const body = $("#t_body").value;
+      await api("/templates", { method: "POST", body: {
+        accountId: $("#t_acct").value, name: $("#t_name").value, language: $("#t_lang").value, category: $("#t_cat").value,
+        components: [{ type: "BODY", text: body }],
+      } });
+      toast("Template created & submitted"); $("#t_lacct").value = $("#t_acct").value; loadTpls($("#t_acct").value);
+    } catch (e) { toast(e.message, true); }
+  };
+  $("#t_sync").onclick = async () => { try { const r = await api("/templates/sync", { method: "POST", body: { accountId: $("#t_acct").value } }); toast(`Synced — ${r.updated} updated`); loadTpls($("#t_acct").value); } catch (e) { toast(e.message, true); } };
+  $("#t_load").onclick = () => loadTpls($("#t_lacct").value);
+  if (accounts.length) loadTpls(accounts[0].id);
+};
+
+views.broadcast = async () => {
+  const { data: accounts } = await api("/accounts");
+  // Gather approved templates across the operator's accounts.
+  const all = [];
+  for (const a of accounts) {
+    const { data } = await api(`/templates?accountId=${a.id}`);
+    data.filter((t) => t.status === "APPROVED").forEach((t) => all.push({ ...t, acct: a }));
+  }
+  const opts = all.map((t) => `<option value="${t.id}">${t.name} (${t.acct.phoneNumberId})</option>`).join("");
+  $("#view").innerHTML = `
+    <div class="panel"><h3>Bulk broadcast (rate-limited)</h3>
+      ${all.length ? `
+      <label>Approved template</label><select id="b_tpl">${opts}</select>
+      <label>Recipients — one per line as <span class="mono">number,var1,var2…</span></label>
+      <textarea id="b_rcpts" rows="6" placeholder="911111111111,#A1,shipped
+922222222222,#A2,packed"></textarea>
+      <button class="btn" id="b_send" style="margin-top:12px">Send broadcast</button>
+      <div class="hint">Sends pace to the plan's per-second rate (Meta 24h tier limits still apply). MOCK accounts simulate.</div>
+      <div id="b_result"></div>`
+      : `<div class="muted">No APPROVED templates yet. Create one under Templates and approve it first.</div>`}
+    </div>`;
+  const btn = $("#b_send");
+  if (btn) btn.onclick = async () => {
+    const lines = $("#b_rcpts").value.split("\n").map((l) => l.trim()).filter(Boolean);
+    const recipients = lines.map((l) => { const [to, ...vars] = l.split(","); return { to: to.trim(), variables: vars.map((v) => v.trim()) }; });
+    if (!recipients.length) return toast("Add at least one recipient", true);
+    btn.disabled = true; btn.textContent = "Sending…";
+    try {
+      const r = await api("/broadcasts", { method: "POST", body: { templateId: $("#b_tpl").value, recipients } });
+      $("#b_result").innerHTML = `<div class="panel" style="margin-top:14px"><b>${r.sent}/${r.total}</b> sent, ${r.failed} failed.${r.errors.length ? `<table style="margin-top:8px"><thead><tr><th>To</th><th>Error</th></tr></thead><tbody>${r.errors.map((e) => `<tr><td class="mono">${e.to}</td><td>${e.error}</td></tr>`).join("")}</tbody></table>` : ""}</div>`;
+      toast(`Broadcast: ${r.sent}/${r.total} sent`);
+    } catch (e) { toast(e.message, true); }
+    finally { btn.disabled = false; btn.textContent = "Send broadcast"; }
+  };
+};
+
 views.analytics = async () => {
   const { data: clients } = await api("/clients");
   const opts = clients.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
@@ -277,11 +393,21 @@ views.analytics = async () => {
   async function load(clientId) {
     if (!clientId) return;
     const a = await api(`/analytics/${clientId}`);
-    const cards = [["Sent", a.totals.sent], ["Delivered", a.totals.delivered], ["Read", a.totals.read], ["Failed", a.totals.failed], ["Inbound", a.totals.inbound]]
-      .map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+    const metrics = [["Sent", a.totals.sent, "#25d366"], ["Delivered", a.totals.delivered, "#3b82f6"], ["Read", a.totals.read, "#a855f7"], ["Failed", a.totals.failed, "#ef4444"], ["Inbound", a.totals.inbound, "#f59e0b"]];
+    const cards = metrics.map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+    const max = Math.max(1, ...metrics.map(([, n]) => n));
+    const bars = metrics.map(([l, n, c]) => `
+      <div style="display:flex;align-items:center;gap:12px;margin:8px 0">
+        <div style="width:80px;color:var(--muted);font-size:13px">${l}</div>
+        <div style="flex:1;background:var(--bg);border-radius:6px;overflow:hidden;height:22px">
+          <div style="width:${(n / max) * 100}%;height:100%;background:${c};min-width:2px"></div>
+        </div>
+        <div style="width:42px;text-align:right;font-weight:600">${n}</div>
+      </div>`).join("");
     const rows = a.accounts.map((ac) => `<tr><td class="mono">${ac.phoneNumberId}</td><td>${badge(ac.status)}</td><td>${ac.messages.sent}</td><td>${ac.messages.delivered}</td><td>${ac.messages.read}</td><td>${ac.messages.failed}</td><td>${ac.messages.inbound}</td><td>${ac.quota ? ac.quota.used + "/" + ac.quota.quota : "—"}</td></tr>`).join("");
     $("#anBox").innerHTML = `<div class="stats">${cards}</div>
-      <div class="panel"><h3>Per account — ${a.clientName}</h3>
+      <div class="panel"><h3>Message breakdown — ${a.clientName}</h3>${bars}</div>
+      <div class="panel"><h3>Per account</h3>
         <table><thead><tr><th>Account</th><th>Status</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Failed</th><th>Inbound</th><th>Quota</th></tr></thead>
         <tbody>${rows || `<tr><td colspan=8 class="muted">No accounts</td></tr>`}</tbody></table></div>`;
   }

@@ -6,6 +6,8 @@ import { PlanService } from "../services/PlanService";
 import { SubscriptionService } from "../services/SubscriptionService";
 import { BillingService } from "../services/BillingService";
 import { MessageService } from "../services/MessageService";
+import { TemplateService } from "../services/TemplateService";
+import { BroadcastService } from "../services/BroadcastService";
 import { AnalyticsService } from "../services/AnalyticsService";
 import { ApiKeyService } from "../services/ApiKeyService";
 import { prisma } from "../db/prisma";
@@ -72,6 +74,15 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   app.post("/admin/api/clients", { preHandler: requireAdmin }, async (req) =>
     ClientService.create(req.body as never)
   );
+  app.patch("/admin/api/clients/:id", { preHandler: requireAdmin }, async (req) => {
+    const { id } = req.params as { id: string };
+    return ClientService.update(id, req.body as never);
+  });
+  app.delete("/admin/api/clients/:id", { preHandler: requireAdmin }, async (req) => {
+    const { id } = req.params as { id: string };
+    await ClientService.delete(id);
+    return { ok: true };
+  });
   app.post("/admin/api/clients/:id/suspend", { preHandler: requireAdmin }, async (req) => {
     const { id } = req.params as { id: string };
     return ClientService.setStatus(id, "SUSPENDED");
@@ -101,6 +112,38 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   app.post("/admin/api/accounts/:id/resume", { preHandler: requireAdmin }, async (req) => {
     const { id } = req.params as { id: string };
     return AccountService.resume(id);
+  });
+  app.post("/admin/api/accounts/:id/deprovision", { preHandler: requireAdmin }, async (req) => {
+    const { id } = req.params as { id: string };
+    return AccountService.deprovision(id);
+  });
+
+  // --- Templates ---
+  app.get("/admin/api/templates", { preHandler: requireAdmin }, async (req) => {
+    const { accountId } = req.query as { accountId: string };
+    return { data: await TemplateService.list(accountId) };
+  });
+  app.post("/admin/api/templates", { preHandler: requireAdmin }, async (req) =>
+    TemplateService.create(req.body as never)
+  );
+  app.post("/admin/api/templates/:id/approve", { preHandler: requireAdmin }, async (req) => {
+    const { id } = req.params as { id: string };
+    return TemplateService.manualApprove(id);
+  });
+  app.post("/admin/api/templates/sync", { preHandler: requireAdmin }, async (req) => {
+    const { accountId } = req.body as { accountId: string };
+    return TemplateService.syncStatuses(accountId);
+  });
+  app.post("/admin/api/templates/:id/send", { preHandler: requireAdmin }, async (req) => {
+    const { id } = req.params as { id: string };
+    const { to, variables } = req.body as { to: string; variables?: string[] };
+    return TemplateService.send(id, to, variables ?? []);
+  });
+
+  // --- Broadcast ---
+  app.post("/admin/api/broadcasts", { preHandler: requireAdmin }, async (req) => {
+    const { templateId, recipients } = req.body as { templateId: string; recipients: { to: string; variables?: string[] }[] };
+    return BroadcastService.broadcastTemplate(templateId, recipients);
   });
 
   // --- Billing ---
