@@ -1,5 +1,9 @@
 # Multi-stage build for the WhatsApp Reseller Console API/worker.
 # The CLI ships in the same image (run via: docker compose run --rm api node dist/cli/index.js ...).
+#
+# The committed prisma/schema.prisma uses provider="sqlite" so local dev/tests need no DB setup.
+# For the deployed image we swap the provider to "postgresql" at build time (see sed below) and
+# sync the schema with `prisma db push` at startup — no provider-specific migration files needed.
 
 # ---- Build stage ----
 FROM node:20-slim AS build
@@ -12,6 +16,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY prisma ./prisma
+# Deployed image targets PostgreSQL; local schema stays sqlite for dev/tests.
+RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
 RUN npx prisma generate
 
 COPY tsconfig.json ./
@@ -28,14 +34,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Prisma client + generated engine, compiled output, and schema for migrations.
+# Prisma client + generated engine, compiled output, the postgres-provider schema, and the
+# static admin/portal UI.
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=build /app/dist ./dist
-COPY prisma ./prisma
+COPY --from=build /app/prisma ./prisma
+COPY public ./public
 
 EXPOSE 3000
 
-# Apply DB migrations, then run the public API (which also mounts the Meta webhook routes).
-# Override the command to run the CLI or the standalone webhook server.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/api/server.js"]
+# Sync the DB schema (creates tables on a fresh Postgres), then run the public API
+# (which also mounts the Meta webhook routes). Override CMD to run the CLI instead.
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/api/server.js"]

@@ -1,28 +1,36 @@
-# Render.com blueprint. Deploy: push this repo to GitHub, then in Render click
-# "New +" -> "Blueprint" and point it at the repo. Render reads this file.
+# Render.com blueprint — FREE tier (free web service + free managed PostgreSQL).
+# Deploy: push this repo to GitHub, then in Render click "New +" -> "Blueprint" and point it
+# at the repo. Render reads this file and provisions both the database and the web service.
 #
-# Uses SQLite on a persistent disk (mounted at /data) — simplest, no separate DB to manage.
-# A persistent disk requires a paid instance (Starter, ~$7/mo); the free tier has no disk and
-# spins down (losing the SQLite file). To stay on the free tier instead, use Render's free
-# PostgreSQL: set DB_PROVIDER=postgresql + DATABASE_URL to the Postgres URL, remove the disk,
-# and change prisma/schema.prisma datasource provider to "postgresql" (then regenerate migrations).
+# The Docker image is built for PostgreSQL (the Dockerfile swaps the Prisma provider at build
+# time); on boot it runs `prisma db push` to create the tables, then auto-seeds the admin + plans.
+#
+# Notes on the free tier:
+#  - The web service spins down after ~15 min idle and cold-starts on the next request (Meta
+#    retries webhooks, so inbound still lands). Upgrade to a paid instance to stay always-on.
+#  - Render's free PostgreSQL is time-limited (expires after the trial window) — fine for testing.
+#    Swap `plan: free` on the database to a paid plan to keep it permanently.
+
+databases:
+  - name: orbit-db
+    plan: free
+    databaseName: orbit
+    user: orbit
 
 services:
   - type: web
     name: orbit-whatsapp
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter # needed for the persistent disk below
+    plan: free
     healthCheckPath: /health
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
     envVars:
       - key: DB_PROVIDER
-        value: sqlite
+        value: postgresql
       - key: DATABASE_URL
-        value: file:/data/prod.db
+        fromDatabase:
+          name: orbit-db
+          property: connectionString
       - key: META_GRAPH_API_VERSION
         value: v22.0
       # Secrets — set these in the Render dashboard (Environment tab). sync:false = not in git.

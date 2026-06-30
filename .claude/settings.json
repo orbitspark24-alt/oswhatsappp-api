@@ -16,7 +16,11 @@
       "Bash(npx ts-node *)",
       "Bash(rm -rf __TRACKED_VAR__/edge-p3)",
       "Bash(node -e \"console.log\\('ENCRYPTION_KEY suggestion:', require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\)\\)\")",
-      "Bash(node -e \"console.log\\('ADMIN_SESSION_SECRET suggestion:', require\\('crypto'\\).randomBytes\\(24\\).toString\\('hex'\\)\\)\")"
+      "Bash(node -e \"console.log\\('ADMIN_SESSION_SECRET suggestion:', require\\('crypto'\\).randomBytes\\(24\\).toString\\('hex'\\)\\)\")",
+      "Bash(cp prisma/schema.prisma /tmp/schema.pg.prisma)",
+      "Bash(sed -i 's/provider = \"sqlite\"/provider = \"postgresql\"/' /tmp/schema.pg.prisma)",
+      "Bash(DATABASE_URL=\"postgresql://u:p@localhost:5432/db\" npx prisma validate --schema /tmp/schema.pg.prisma)",
+      "Bash(curl -s -o /dev/null -w \"local server health: %{http_code}\\\\n\" http://localhost:3000/health)"
     ]
   }
 }
