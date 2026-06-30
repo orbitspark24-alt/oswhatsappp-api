@@ -6,6 +6,10 @@ import { MessageService } from "../services/MessageService";
 import { UsageService } from "../services/UsageService";
 import { AutomationService } from "../services/AutomationService";
 import { AiReplyService } from "../services/AiReplyService";
+import { ContactService } from "../services/ContactService";
+import { TemplateService } from "../services/TemplateService";
+import { BroadcastService, BroadcastRecipient } from "../services/BroadcastService";
+import { BillingService } from "../services/BillingService";
 import { prisma } from "../db/prisma";
 import { ServiceError } from "../services/errors";
 
@@ -129,6 +133,71 @@ export function registerPortalRoutes(app: FastifyInstance): void {
     const rule = await prisma.automationRule.findUnique({ where: { id } });
     if (!rule || rule.clientId !== req.clientId!) throw new ServiceError("Not your rule.", 403, "forbidden");
     return AutomationService.remove(id);
+  });
+
+  // ---- Contacts / audience ----
+  app.get("/portal/api/contacts", { preHandler: requireClient }, async (req) => {
+    const { optInStatus } = req.query as { optInStatus?: string };
+    return { data: await ContactService.list(req.clientId!, { optInStatus }) };
+  });
+
+  app.post("/portal/api/contacts", { preHandler: requireClient }, async (req) => {
+    const body = req.body as { phoneNumber: string; name?: string; tags?: string[] };
+    return ContactService.upsert({ clientId: req.clientId!, ...body });
+  });
+
+  app.post("/portal/api/contacts/:phone/opt", { preHandler: requireClient }, async (req) => {
+    const { phone } = req.params as { phone: string };
+    const { optedIn } = req.body as { optedIn: boolean };
+    return ContactService.setOptIn(req.clientId!, phone, optedIn);
+  });
+
+  // ---- Templates (for broadcasts) ----
+  app.get("/portal/api/templates", { preHandler: requireClient }, async (req) => {
+    const { accountId } = req.query as { accountId: string };
+    await ownedAccount(accountId, req.clientId!);
+    return { data: await TemplateService.list(accountId) };
+  });
+
+  // ---- Broadcast ----
+  app.post("/portal/api/broadcasts", { preHandler: requireClient }, async (req) => {
+    const body = req.body as { templateId: string; recipients: BroadcastRecipient[] };
+    const template = await TemplateService.getById(body.templateId);
+    await ownedAccount(template.whatsappAccountId, req.clientId!);
+    return BroadcastService.broadcastTemplate(body.templateId, body.recipients);
+  });
+
+  // ---- Billing (read-only) ----
+  app.get("/portal/api/billing", { preHandler: requireClient }, async (req) => {
+    const [subscriptions, invoices] = await Promise.all([
+      prisma.subscription.findMany({
+        where: { clientId: req.clientId! },
+        include: { plan: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      BillingService.listInvoices({ clientId: req.clientId! }),
+    ]);
+    return {
+      subscriptions: subscriptions.map((s) => ({
+        id: s.id,
+        plan: s.plan.name,
+        priceCents: s.plan.priceCents,
+        currency: s.plan.currency,
+        messageQuota: s.plan.messageQuota,
+        status: s.status,
+        renewalDate: s.renewalDate,
+      })),
+      invoices: invoices.map((i) => ({
+        id: i.id,
+        amountCents: i.amountCents,
+        currency: i.currency,
+        status: i.status,
+        periodStart: i.periodStart,
+        periodEnd: i.periodEnd,
+        dueAt: i.dueAt,
+        paidAt: i.paidAt,
+      })),
+    };
   });
 }
 

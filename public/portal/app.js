@@ -41,10 +41,10 @@ async function showInbox(me) {
   // Live-ish: refresh the open thread + thread list every 5s.
   clearInterval(state.pollTimer);
   state.pollTimer = setInterval(refresh, 5000);
-  // Deep-link to a tab (?tab=auto).
-  if (new URLSearchParams(location.search).get("tab") === "auto") {
-    document.querySelector('.ptab[data-tab="auto"]').click();
-  }
+  // Deep-link to a tab (?tab=auto|broadcast|contacts|billing).
+  const wantTab = new URLSearchParams(location.search).get("tab");
+  const tabBtn = wantTab && document.querySelector(`.ptab[data-tab="${wantTab}"]`);
+  if (tabBtn) tabBtn.click();
 }
 
 async function selectAccount(accountId) {
@@ -115,16 +115,124 @@ async function refresh() {
 
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-// ---- Tabs: Inbox vs Automations ----
+// ---- Tabs ----
+const VIEWS = { inbox: "inboxView", auto: "autoView", broadcast: "broadcastView", contacts: "contactsView", billing: "billingView" };
+const LOADERS = { auto: loadAutomations, broadcast: loadBroadcast, contacts: loadContacts, billing: loadBilling };
 document.querySelectorAll(".ptab").forEach((b) => b.onclick = () => {
+  const tab = b.dataset.tab;
   document.querySelectorAll(".ptab").forEach((x) => x.classList.toggle("active", x === b));
-  const auto = b.dataset.tab === "auto";
-  $("#inboxView").classList.toggle("hide", auto);
-  $("#autoView").classList.toggle("hide", !auto);
-  $("#acctWrap").classList.toggle("hide", auto);
-  $("#threads").classList.toggle("hide", auto);
-  if (auto) loadAutomations();
+  Object.values(VIEWS).forEach((id) => $("#" + id).classList.add("hide"));
+  $("#" + VIEWS[tab]).classList.remove("hide");
+  const isInbox = tab === "inbox";
+  $("#acctWrap").classList.toggle("hide", !isInbox);
+  $("#threads").classList.toggle("hide", !isInbox);
+  if (LOADERS[tab]) LOADERS[tab]();
 });
+
+const money = (cents, cur = "USD") => `${(cents / 100).toFixed(2)} ${cur}`;
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString() : "—");
+
+// ---- Broadcast ----
+async function loadBroadcast() {
+  const view = $("#broadcastView");
+  view.innerHTML = `<div class="muted">Loading…</div>`;
+  const { data: accounts } = await api("/accounts");
+  const approved = [];
+  for (const a of accounts) {
+    const { data } = await api(`/templates?accountId=${a.id}`);
+    data.filter((t) => t.status === "APPROVED").forEach((t) => approved.push({ ...t, acct: a }));
+  }
+  const opts = approved.map((t) => `<option value="${t.id}">${t.name} (${t.acct.displayPhoneNumber || t.acct.phoneNumberId})</option>`).join("");
+  view.innerHTML = `
+    <h2 style="margin:0 0 6px">Broadcast</h2>
+    <p class="muted" style="margin:0 0 18px">Send an approved template to many contacts, rate-limited to your plan.</p>
+    <div class="panel">
+      ${approved.length ? `
+      <label>Approved template</label><select id="b_tpl">${opts}</select>
+      <label>Recipients — one per line: <span class="mono">number,var1,var2</span></label>
+      <textarea id="b_rcpts" rows="7" placeholder="911111111111,Aman,50%
+922222222222,Riya,40%"></textarea>
+      <button class="btn" id="b_send" style="margin-top:12px">Send broadcast</button>
+      <div id="b_out"></div>`
+      : `<div class="muted">No approved templates yet. Your provider creates and approves templates for your account.</div>`}
+    </div>`;
+  const btn = $("#b_send");
+  if (btn) btn.onclick = async () => {
+    const lines = $("#b_rcpts").value.split("\n").map((l) => l.trim()).filter(Boolean);
+    const recipients = lines.map((l) => { const [to, ...vars] = l.split(","); return { to: to.trim(), variables: vars.map((v) => v.trim()) }; });
+    if (!recipients.length) return toast("Add at least one recipient", true);
+    btn.disabled = true; btn.textContent = "Sending…";
+    try {
+      const r = await api("/broadcasts", { method: "POST", body: { templateId: $("#b_tpl").value, recipients } });
+      $("#b_out").innerHTML = `<div class="panel" style="margin-top:14px"><b>${r.sent}/${r.total}</b> sent, ${r.failed} failed.</div>`;
+      toast(`Broadcast: ${r.sent}/${r.total} sent`);
+    } catch (e) { toast(e.message, true); }
+    finally { btn.disabled = false; btn.textContent = "Send broadcast"; }
+  };
+}
+
+// ---- Contacts ----
+async function loadContacts() {
+  const view = $("#contactsView");
+  view.innerHTML = `<div class="muted">Loading…</div>`;
+  const { data } = await api("/contacts");
+  const rows = data.map((c) => `<tr>
+    <td class="mono">${c.phoneNumber}</td><td>${esc(c.name) || "—"}</td>
+    <td>${optBadge(c.optInStatus)}</td>
+    <td>${c.optInStatus === "OPTED_OUT"
+      ? `<button class="btn tiny" data-in="${c.phoneNumber}">Opt in</button>`
+      : `<button class="btn tiny secondary" data-out="${c.phoneNumber}">Opt out</button>`}</td>
+  </tr>`).join("");
+  view.innerHTML = `
+    <h2 style="margin:0 0 6px">Contacts</h2>
+    <p class="muted" style="margin:0 0 18px">Your audience and their consent status.</p>
+    <div class="panel"><h3>Add a contact</h3>
+      <div class="row">
+        <div><label>Phone (E.164, no +)</label><input id="c_phone" placeholder="15551234567"></div>
+        <div><label>Name</label><input id="c_name" placeholder="Optional"></div>
+        <div style="flex:0;align-self:flex-end"><button class="btn" id="c_add">Add</button></div>
+      </div>
+    </div>
+    <div class="panel"><h3>Contacts (${data.length})</h3>
+      <table><thead><tr><th>Phone</th><th>Name</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan=4 class="muted">No contacts yet</td></tr>`}</tbody></table>
+    </div>`;
+  $("#c_add").onclick = async () => {
+    try { await api("/contacts", { method: "POST", body: { phoneNumber: $("#c_phone").value.trim(), name: $("#c_name").value.trim() || undefined } }); toast("Contact added"); loadContacts(); }
+    catch (e) { toast(e.message, true); }
+  };
+  view.querySelectorAll("[data-out]").forEach((b) => b.onclick = async () => { await api(`/contacts/${b.dataset.out}/opt`, { method: "POST", body: { optedIn: false } }); toast("Opted out"); loadContacts(); });
+  view.querySelectorAll("[data-in]").forEach((b) => b.onclick = async () => { await api(`/contacts/${b.dataset.in}/opt`, { method: "POST", body: { optedIn: true } }); toast("Opted in"); loadContacts(); });
+}
+function optBadge(s) {
+  const cls = s === "OPTED_IN" ? "ok" : s === "OPTED_OUT" ? "bad" : "muted";
+  return `<span class="badge ${cls}">${s}</span>`;
+}
+
+// ---- Billing ----
+async function loadBilling() {
+  const view = $("#billingView");
+  view.innerHTML = `<div class="muted">Loading…</div>`;
+  const { subscriptions, invoices } = await api("/billing");
+  const subRows = subscriptions.map((s) => `<tr><td>${s.plan}</td><td>${money(s.priceCents, s.currency)}/mo</td><td>${s.messageQuota} msgs</td><td>${optBadge2(s.status)}</td><td>${fmtDate(s.renewalDate)}</td></tr>`).join("");
+  const invRows = invoices.map((i) => `<tr><td class="mono">${i.id.slice(0, 12)}</td><td>${money(i.amountCents, i.currency)}</td><td>${optBadge2(i.status)}</td><td>${fmtDate(i.dueAt)}</td><td>${fmtDate(i.paidAt)}</td></tr>`).join("");
+  view.innerHTML = `
+    <h2 style="margin:0 0 6px">Billing</h2>
+    <p class="muted" style="margin:0 0 18px">Your plan and invoices.</p>
+    <div class="panel"><h3>Subscription</h3>
+      <table><thead><tr><th>Plan</th><th>Price</th><th>Quota</th><th>Status</th><th>Renews</th></tr></thead>
+      <tbody>${subRows || `<tr><td colspan=5 class="muted">No active subscription</td></tr>`}</tbody></table>
+    </div>
+    <div class="panel"><h3>Invoices (${invoices.length})</h3>
+      <table><thead><tr><th>Invoice</th><th>Amount</th><th>Status</th><th>Due</th><th>Paid</th></tr></thead>
+      <tbody>${invRows || `<tr><td colspan=5 class="muted">No invoices</td></tr>`}</tbody></table>
+    </div>`;
+}
+function optBadge2(s) {
+  const ok = ["ACTIVE", "PAID"], bad = ["SUSPENDED", "OVERDUE", "CANCELLED", "PAST_DUE"];
+  const cls = ok.includes(s) ? "ok" : bad.includes(s) ? "bad" : "warn";
+  return `<span class="badge ${cls}">${s}</span>`;
+}
 
 const RULE_LABELS = {
   WELCOME: "Welcome message", KEYWORD: "Keyword auto-reply", AWAY: "Away / business-hours",
