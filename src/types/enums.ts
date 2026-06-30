@@ -41,3 +41,6 @@ export type ApiKeyStatus = z.infer<typeof ApiKeyStatus>;
 
 export const WebhookEndpointStatus = z.enum(["ACTIVE", "DISABLED"]);
 export type WebhookEndpointStatus = z.infer<typeof WebhookEndpointStatus>;
+
+export const AutomationType = z.enum(["WELCOME", "KEYWORD", "AWAY", "OPT_OUT", "AI"]);
+export type AutomationType = z.infer<typeof AutomationType>;

@@ -4,6 +4,8 @@ import { AccountService } from "../services/AccountService";
 import { ConversationService } from "../services/ConversationService";
 import { MessageService } from "../services/MessageService";
 import { UsageService } from "../services/UsageService";
+import { AutomationService } from "../services/AutomationService";
+import { AiReplyService } from "../services/AiReplyService";
 import { prisma } from "../db/prisma";
 import { ServiceError } from "../services/errors";
 
@@ -92,4 +94,48 @@ export function registerPortalRoutes(app: FastifyInstance): void {
     await ownedAccount(accountId, req.clientId!);
     return UsageService.getQuotaStatus(accountId);
   });
+
+  // ---- Automations (client self-serve) ----
+  app.get("/portal/api/automations", { preHandler: requireClient }, async (req) => {
+    const rules = await AutomationService.list(req.clientId!);
+    return {
+      aiAvailable: AiReplyService.isConfigured(),
+      data: rules.map((r) => ({ ...r, config: parseJson(r.configJson) })),
+    };
+  });
+
+  app.post("/portal/api/automations", { preHandler: requireClient }, async (req) => {
+    const body = req.body as { type: string; whatsappAccountId?: string; priority?: number; config?: Record<string, unknown> };
+    if (body.whatsappAccountId) await ownedAccount(body.whatsappAccountId, req.clientId!);
+    return AutomationService.create({
+      clientId: req.clientId!,
+      type: body.type as never,
+      whatsappAccountId: body.whatsappAccountId ?? null,
+      priority: body.priority ?? 100,
+      config: body.config ?? {},
+    });
+  });
+
+  app.patch("/portal/api/automations/:id", { preHandler: requireClient }, async (req) => {
+    const { id } = req.params as { id: string };
+    const rule = await prisma.automationRule.findUnique({ where: { id } });
+    if (!rule || rule.clientId !== req.clientId!) throw new ServiceError("Not your rule.", 403, "forbidden");
+    const body = req.body as { enabled?: boolean; priority?: number; config?: Record<string, unknown> };
+    return AutomationService.update(id, body);
+  });
+
+  app.delete("/portal/api/automations/:id", { preHandler: requireClient }, async (req) => {
+    const { id } = req.params as { id: string };
+    const rule = await prisma.automationRule.findUnique({ where: { id } });
+    if (!rule || rule.clientId !== req.clientId!) throw new ServiceError("Not your rule.", 403, "forbidden");
+    return AutomationService.remove(id);
+  });
+}
+
+function parseJson(s: string): Record<string, unknown> {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return {};
+  }
 }

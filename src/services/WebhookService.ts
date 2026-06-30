@@ -3,9 +3,16 @@ import { prisma } from "../db/prisma";
 import { MessageRepository } from "../repositories/MessageRepository";
 import { WhatsAppAccountRepository } from "../repositories/WhatsAppAccountRepository";
 import { UsageService } from "./UsageService";
+import { AutomationService } from "./AutomationService";
 import { eventBus } from "../events/EventBus";
 import { config } from "../config";
 import { logger } from "../lib/logger";
+
+// Best-effort extraction of the text body from an inbound message payload.
+function inboundText(msg: { type?: string; text?: { body?: string }; [k: string]: unknown }): string {
+  if (msg.type === "text") return msg.text?.body ?? "";
+  return "";
+}
 
 // Maps Meta delivery status strings to our MessageStatus enum values.
 const STATUS_MAP: Record<string, string> = {
@@ -91,6 +98,12 @@ export const WebhookService = {
             type: msg.type ?? "unknown",
             content: msg,
           });
+          // Run client-configured automations (welcome/keyword/away/opt-out/AI) on the reply.
+          await AutomationService.handleInbound(
+            { id: account.id, clientId: account.clientId },
+            msg.from ?? "unknown",
+            inboundText(msg)
+          );
           inbound++;
         }
 

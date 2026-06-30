@@ -10,7 +10,11 @@
       "Bash(curl -s -b /tmp/pcj.txt http://localhost:3000/portal/api/conversations?accountId=__TRACKED_VAR__)",
       "Bash(curl -s -b /tmp/pcj.txt http://localhost:3000/portal/api/conversations/918797033985?accountId=__TRACKED_VAR__)",
       "Bash(rm -f public/portal/_preview.html)",
-      "Bash(rm -rf __TRACKED_VAR__/edge-p2)"
+      "Bash(rm -rf __TRACKED_VAR__/edge-p2)",
+      "Bash(npm install *)",
+      "Bash(curl -s -b /tmp/pc.txt http://localhost:3000/portal/api/conversations/917000000001?accountId=__TRACKED_VAR__)",
+      "Bash(npx ts-node *)",
+      "Bash(rm -rf __TRACKED_VAR__/edge-p3)"
     ]
   }
 }

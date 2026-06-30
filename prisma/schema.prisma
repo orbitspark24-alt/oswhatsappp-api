@@ -54,6 +54,7 @@ model Client {
   contacts         Contact[]
   apiKeys          ApiKey[]
   webhookEndpoints WebhookEndpoint[]
+  automationRules  AutomationRule[]
 
   @@map("clients")
 }
@@ -85,13 +86,37 @@ model WhatsAppAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  subscriptions Subscription[]
-  usageRecords  UsageRecord[]
-  messages      Message[]
-  templates     Template[]
-  contacts      Contact[]
+  subscriptions   Subscription[]
+  usageRecords    UsageRecord[]
+  messages        Message[]
+  templates       Template[]
+  contacts        Contact[]
+  automationRules AutomationRule[]
 
   @@map("whatsapp_accounts")
+}
+
+// ---------- Automation (client self-serve auto-replies) ----------
+
+model AutomationRule {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // null = applies to all the client's accounts; else scoped to one account.
+  whatsappAccountId String?
+  whatsappAccount   WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id])
+
+  type     String  // WELCOME | KEYWORD | AWAY | OPT_OUT | AI — see AutomationType in src/types/enums.ts
+  enabled  Boolean @default(true)
+  priority Int     @default(100) // lower runs first
+  configJson String @default("{}") // type-specific config (keywords, message, businessHours, systemPrompt, model…)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@map("automation_rules")
 }
 
 // ---------- Billing ----------

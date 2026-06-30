@@ -25,23 +25,30 @@
   <!-- Inbox -->
   <div id="portal" class="portal hide">
     <aside class="prail">
-      <div class="brand"><span class="dot">💬</span> Inbox</div>
-      <div class="acct">
+      <div class="brand"><span class="dot">💬</span> WhatsApp</div>
+      <div class="ptabs">
+        <button class="ptab active" data-tab="inbox">💬 Inbox</button>
+        <button class="ptab" data-tab="auto">⚙️ Automations</button>
+      </div>
+      <div class="acct" id="acctWrap">
         <label style="margin-top:0">Number</label>
         <select id="acctSel"></select>
       </div>
       <div class="threads" id="threads"></div>
       <div class="foot"><span id="who"></span><button class="btn tiny secondary" id="logout">Sign out</button></div>
     </aside>
-    <section class="chat">
-      <div class="head"><div class="who" id="chatWho">Select a conversation</div><div class="who" id="quota" style="font-size:12px;color:var(--muted)"></div></div>
-      <div id="note" class="note hide"></div>
-      <div class="body" id="chatBody"><div class="empty">Pick a conversation on the left, or wait for a customer to message you.</div></div>
-      <form class="composer" id="composer">
-        <input id="msg" placeholder="Type a reply…" autocomplete="off" />
-        <button class="btn" type="submit">Send</button>
-      </form>
-    </section>
+    <div class="maincol">
+      <section class="chat" id="inboxView">
+        <div class="head"><div class="who" id="chatWho">Select a conversation</div><div class="who" id="quota" style="font-size:12px;color:var(--muted)"></div></div>
+        <div id="note" class="note hide"></div>
+        <div class="body" id="chatBody"><div class="empty">Pick a conversation on the left, or wait for a customer to message you.</div></div>
+        <form class="composer" id="composer">
+          <input id="msg" placeholder="Type a reply…" autocomplete="off" />
+          <button class="btn" type="submit">Send</button>
+        </form>
+      </section>
+      <section class="auto hide" id="autoView"></section>
+    </div>
   </div>
 
   <div id="toast" class="toast hide"></div>
