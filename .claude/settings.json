@@ -20,7 +20,8 @@
       "Bash(cp prisma/schema.prisma /tmp/schema.pg.prisma)",
       "Bash(sed -i 's/provider = \"sqlite\"/provider = \"postgresql\"/' /tmp/schema.pg.prisma)",
       "Bash(DATABASE_URL=\"postgresql://u:p@localhost:5432/db\" npx prisma validate --schema /tmp/schema.pg.prisma)",
-      "Bash(curl -s -o /dev/null -w \"local server health: %{http_code}\\\\n\" http://localhost:3000/health)"
+      "Bash(curl -s -o /dev/null -w \"local server health: %{http_code}\\\\n\" http://localhost:3000/health)",
+      "Bash(git push *)"
     ]
   }
 }

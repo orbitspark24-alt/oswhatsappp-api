@@ -13,14 +13,23 @@ export async function ensureBootstrap(): Promise<void> {
   if (process.env.NODE_ENV === "test") return;
 
   try {
-    const adminCount = await prisma.admin.count();
-    if (adminCount === 0) {
-      const email = process.env.ADMIN_EMAIL || "admin@demo.local";
-      const password = process.env.ADMIN_PASSWORD || "changeme";
-      await prisma.admin.create({
-        data: { email, name: process.env.ADMIN_NAME || "Admin", passwordHash: hash(password) },
+    // Admin login: if ADMIN_EMAIL + ADMIN_PASSWORD are set, upsert that admin on every boot —
+    // so the password is always recoverable by changing the env var and redeploying. If they're
+    // not set, create a default admin only when none exists yet.
+    const envEmail = process.env.ADMIN_EMAIL;
+    const envPassword = process.env.ADMIN_PASSWORD;
+    if (envEmail && envPassword) {
+      await prisma.admin.upsert({
+        where: { email: envEmail },
+        update: { passwordHash: hash(envPassword) },
+        create: { email: envEmail, name: process.env.ADMIN_NAME || "Admin", passwordHash: hash(envPassword) },
       });
-      logger.info({ email }, "Bootstrap: created initial admin login");
+      logger.info({ email: envEmail }, "Bootstrap: admin login synced from env (password reset on boot)");
+    } else if ((await prisma.admin.count()) === 0) {
+      await prisma.admin.create({
+        data: { email: "admin@demo.local", name: "Admin", passwordHash: hash("changeme") },
+      });
+      logger.info("Bootstrap: created default admin (admin@demo.local / changeme)");
     }
 
     const planCount = await prisma.plan.count();
