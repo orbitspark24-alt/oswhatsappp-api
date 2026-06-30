@@ -95,11 +95,33 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   // --- Accounts ---
   app.get("/admin/api/accounts", { preHandler: requireAdmin }, async (req) => {
     const { clientId } = req.query as { clientId?: string };
-    return { data: await AccountService.list({ clientId }) };
+    const accounts = await AccountService.list({ clientId });
+    // Strip secret columns before returning to the browser.
+    const data = accounts.map(({ accessTokenEncrypted, webhookVerifyTokenEncrypted, appSecretEncrypted, ...safe }) => safe);
+    return { data };
   });
   app.post("/admin/api/accounts", { preHandler: requireAdmin }, async (req) =>
     AccountService.provision(req.body as never)
   );
+
+  // One-shot "Connect WhatsApp" wizard: provision (CLOUD_API) -> health-check -> import
+  // templates, returning the result of each step so the UI can show progress.
+  app.post("/admin/api/accounts/connect", { preHandler: requireAdmin }, async (req) => {
+    const body = req.body as {
+      clientId: string; wabaId: string; phoneNumberId: string; accessToken: string; webhookVerifyToken?: string;
+    };
+    const account = await AccountService.provision({ ...body, provider: "CLOUD_API" });
+    const { account: checked, result } = await AccountService.healthCheck(account.id);
+
+    let templates = { fetched: 0, updated: 0, imported: 0 };
+    if (result.healthy) {
+      // Template import is best-effort — a healthy number is the success criterion.
+      templates = await TemplateService.syncStatuses(account.id).catch(() => templates);
+    }
+    // Never echo secret columns, even as ciphertext.
+    const { accessTokenEncrypted, webhookVerifyTokenEncrypted, appSecretEncrypted, ...safe } = checked;
+    return { account: safe, health: result, templates };
+  });
   app.post("/admin/api/accounts/:id/health-check", { preHandler: requireAdmin }, async (req) => {
     const { id } = req.params as { id: string };
     const { account, result } = await AccountService.healthCheck(id);

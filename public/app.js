@@ -176,7 +176,20 @@ views.accounts = async () => {
     </td>
   </tr>`).join("");
   $("#view").innerHTML = `
-    <div class="panel"><h3>Provision a WhatsApp account</h3>
+    <div class="panel" style="border-color:var(--brand-2)">
+      <h3>🔌 Connect a real WhatsApp number (guided)</h3>
+      <div class="row">
+        <div><label>Client</label><select id="w_client">${opts}</select></div>
+        <div><label>WABA ID</label><input id="w_waba" placeholder="WhatsApp Business Account ID"></div>
+        <div><label>Phone Number ID</label><input id="w_pnid" placeholder="Meta phone number ID"></div>
+      </div>
+      <label>Access Token (paste your Meta token — stored encrypted, never shown again)</label>
+      <input id="w_token" type="password" placeholder="EAA…">
+      <button class="btn" id="w_connect" style="margin-top:12px">Connect &amp; verify</button>
+      <div class="hint">Runs provision → health check → template import in one step. Use this for live Meta numbers.</div>
+      <div id="w_status" style="margin-top:14px"></div>
+    </div>
+    <div class="panel"><h3>Provision manually (advanced)</h3>
       <div class="row">
         <div><label>Client</label><select id="a_client">${opts}</select></div>
         <div><label>Provider</label><select id="a_provider"><option value="MOCK">MOCK (test)</option><option value="CLOUD_API">CLOUD_API (live)</option></select></div>
@@ -194,6 +207,29 @@ views.accounts = async () => {
       <table><thead><tr><th>Phone Number ID</th><th>Client</th><th>Provider</th><th>Status</th><th>Health</th><th></th></tr></thead>
       <tbody>${rows || `<tr><td colspan=6 class="muted">No accounts yet</td></tr>`}</tbody></table>
     </div>`;
+  $("#w_connect").onclick = async () => {
+    const btn = $("#w_connect"), box = $("#w_status");
+    const waba = $("#w_waba").value.trim(), pnid = $("#w_pnid").value.trim(), token = $("#w_token").value.trim();
+    if (!waba || !pnid || !token) return toast("WABA ID, Phone Number ID and Access Token are required", true);
+    btn.disabled = true; btn.textContent = "Connecting…";
+    box.innerHTML = `<div class="muted">⏳ Provisioning → health check → importing templates…</div>`;
+    try {
+      const r = await api("/accounts/connect", { method: "POST", body: { clientId: $("#w_client").value, wabaId: waba, phoneNumberId: pnid, accessToken: token } });
+      if (r.health.healthy) {
+        box.innerHTML = `<div class="panel" style="margin:0;border-color:var(--brand)">
+          <div>✅ <b>Connected & verified</b></div>
+          <div style="margin-top:8px" class="muted">Display number: <b>${r.health.displayPhoneNumber || "—"}</b> · Verified name: <b>${r.health.verifiedName || "—"}</b> · Quality: ${r.health.qualityRating || "—"}</div>
+          <div style="margin-top:6px" class="muted">Templates imported: <b>${r.templates.imported}</b> (updated ${r.templates.updated}). Go to <b>Templates</b> to send <span class="mono">hello_world</span> as your first message.</div>
+        </div>`;
+        toast("WhatsApp number connected ✓");
+      } else {
+        box.innerHTML = `<div class="panel" style="margin:0;border-color:var(--danger)">❌ Provisioned but health check failed:<br><span class="muted">${r.health.error || "unknown error"}</span><div class="hint">Check the access token (may be expired) and that the Phone Number ID is correct.</div></div>`;
+      }
+      setTimeout(() => navigate("accounts"), 4000);
+    } catch (e) {
+      box.innerHTML = `<div class="panel" style="margin:0;border-color:var(--danger)">❌ ${e.message}</div>`;
+    } finally { btn.disabled = false; btn.textContent = "Connect & verify"; }
+  };
   $("#a_add").onclick = async () => {
     try {
       await api("/accounts", { method: "POST", body: {
