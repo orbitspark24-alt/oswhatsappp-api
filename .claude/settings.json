@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -c 'user.name=ORBIT whatsapp api' -c user.email=orbitspark24@gmail.com commit -q -m ' *)",
+      "Bash(curl -s -b /tmp/cj3.txt -X POST http://localhost:3000/admin/api/accounts/connect -H 'Content-Type: application/json' -d '{\"clientId\":\"__TRACKED_VAR__\",\"wabaId\":\"1335105362151502\",\"phoneNumberId\":\"realtest-__TRACKED_VAR__\",\"accessToken\":\"EAA_expired_or_bad_token\"}')",
+      "Bash(curl -s -c /tmp/cj4.txt -X POST http://localhost:3000/admin/api/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@demo.local\",\"password\":\"changeme\"}' -o /dev/null)",
+      "Bash(curl -s -b /tmp/cj4.txt http://localhost:3000/admin/api/accounts)",
+      "Bash(rm -f public/_preview.html)",
+      "Bash(rm -rf __TRACKED_VAR__/edge-profile)",
+      "Bash(curl -s -b /tmp/pcj.txt http://localhost:3000/portal/api/conversations?accountId=__TRACKED_VAR__)",
+      "Bash(curl -s -b /tmp/pcj.txt http://localhost:3000/portal/api/conversations/918797033985?accountId=__TRACKED_VAR__)",
+      "Bash(rm -f public/portal/_preview.html)",
+      "Bash(rm -rf __TRACKED_VAR__/edge-p2)"
+    ]
+  }
+}

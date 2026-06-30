@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhatsApp Inbox</title>
+  <link rel="stylesheet" href="/portal/portal.css" />
+</head>
+<body>
+  <!-- Login -->
+  <div id="login" class="login-wrap">
+    <form class="login-card" id="loginForm">
+      <div class="brand-badge">💬</div>
+      <h1>WhatsApp Inbox</h1>
+      <p>Sign in to your account</p>
+      <label>Email</label>
+      <input id="email" type="email" placeholder="you@company.com" />
+      <label>Password</label>
+      <input id="password" type="password" />
+      <button class="btn" style="width:100%; margin-top:18px;" type="submit">Sign in</button>
+      <div class="hint" id="loginHint">Ask your provider for your login.</div>
+    </form>
+  </div>
+
+  <!-- Inbox -->
+  <div id="portal" class="portal hide">
+    <aside class="prail">
+      <div class="brand"><span class="dot">💬</span> Inbox</div>
+      <div class="acct">
+        <label style="margin-top:0">Number</label>
+        <select id="acctSel"></select>
+      </div>
+      <div class="threads" id="threads"></div>
+      <div class="foot"><span id="who"></span><button class="btn tiny secondary" id="logout">Sign out</button></div>
+    </aside>
+    <section class="chat">
+      <div class="head"><div class="who" id="chatWho">Select a conversation</div><div class="who" id="quota" style="font-size:12px;color:var(--muted)"></div></div>
+      <div id="note" class="note hide"></div>
+      <div class="body" id="chatBody"><div class="empty">Pick a conversation on the left, or wait for a customer to message you.</div></div>
+      <form class="composer" id="composer">
+        <input id="msg" placeholder="Type a reply…" autocomplete="off" />
+        <button class="btn" type="submit">Send</button>
+      </form>
+    </section>
+  </div>
+
+  <div id="toast" class="toast hide"></div>
+  <script src="/portal/app.js"></script>
+</body>
+</html>

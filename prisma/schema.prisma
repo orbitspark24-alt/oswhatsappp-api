@@ -43,6 +43,8 @@ model Client {
   email       String   @unique
   phone       String?
   status      String   @default("ACTIVE") // ACTIVE | SUSPENDED | CANCELLED — see ClientStatus in src/types/enums.ts
+  // Client portal login (the customer-facing web app). Set by the admin; null = no portal access yet.
+  portalPasswordHash String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

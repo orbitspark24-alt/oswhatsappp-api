@@ -120,6 +120,7 @@ views.clients = async () => {
         ? `<button class="btn tiny secondary" data-suspend="${c.id}">Suspend</button>`
         : `<button class="btn tiny" data-activate="${c.id}">Activate</button>`}
       <button class="btn tiny secondary" data-edit='${JSON.stringify({ id: c.id, name: c.name, email: c.email, companyName: c.companyName || "" }).replace(/'/g, "&#39;")}'>Edit</button>
+      <button class="btn tiny secondary" data-portal="${c.id}" data-email="${c.email}">Portal login</button>
       <button class="btn tiny danger" data-del="${c.id}" data-name="${c.name}">Delete</button>
     </td>
   </tr>`).join("");
@@ -155,6 +156,13 @@ views.clients = async () => {
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
     if (!confirm(`Delete "${b.dataset.name}" and all their data? This cannot be undone.`)) return;
     try { await api(`/clients/${b.dataset.del}`, { method: "DELETE" }); toast("Client deleted"); navigate("clients"); }
+    catch (e) { toast(e.message, true); }
+  });
+  document.querySelectorAll("[data-portal]").forEach((b) => b.onclick = async () => {
+    const pw = prompt(`Set a portal password for ${b.dataset.email}.\nThey'll log in at  /portal  with this email + password.`);
+    if (!pw) return;
+    try { await api(`/clients/${b.dataset.portal}/portal-password`, { method: "POST", body: { password: pw } });
+      toast("Portal login enabled — share: " + location.origin + "/portal"); }
     catch (e) { toast(e.message, true); }
   });
 };

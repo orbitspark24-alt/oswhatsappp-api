@@ -18,6 +18,7 @@ import { registerAccountRoutes } from "./routes/account";
 import { registerBillingRoutes } from "./routes/billing";
 import { registerWebhookEndpointRoutes } from "./routes/webhookEndpoints";
 import { registerAdminRoutes } from "../admin/routes";
+import { registerPortalRoutes } from "../portal/routes";
 
 // Public REST API for the CRM. Mirrors the service layer the CLI uses, so console and CRM
 // stay in sync. Secured with per-client API keys (Authorization: Bearer wac_live_...).
@@ -82,6 +83,9 @@ export async function buildApiServer(): Promise<FastifyInstance> {
 
   // Admin dashboard JSON API (session-cookie auth) backing the static UI at "/".
   registerAdminRoutes(app);
+
+  // Customer-facing client portal JSON API, backing the static portal at "/portal".
+  registerPortalRoutes(app);
 
   app.get("/health", { schema: { tags: ["system"], summary: "Health check" } }, async () => ({ ok: true }));
 

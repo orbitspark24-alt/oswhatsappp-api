@@ -10,6 +10,7 @@ import { TemplateService } from "../services/TemplateService";
 import { BroadcastService } from "../services/BroadcastService";
 import { AnalyticsService } from "../services/AnalyticsService";
 import { ApiKeyService } from "../services/ApiKeyService";
+import { ClientAuthService } from "../services/ClientAuthService";
 import { prisma } from "../db/prisma";
 
 const COOKIE = "wac_admin";
@@ -82,6 +83,12 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     const { id } = req.params as { id: string };
     await ClientService.delete(id);
     return { ok: true };
+  });
+  // Enable/refresh the client's portal login (the customer-facing app).
+  app.post("/admin/api/clients/:id/portal-password", { preHandler: requireAdmin }, async (req) => {
+    const { id } = req.params as { id: string };
+    const { password } = req.body as { password: string };
+    return ClientAuthService.setPassword(id, password);
   });
   app.post("/admin/api/clients/:id/suspend", { preHandler: requireAdmin }, async (req) => {
     const { id } = req.params as { id: string };

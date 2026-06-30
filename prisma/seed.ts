@@ -37,12 +37,14 @@ async function main() {
   }
   console.log(`Plans: ${plans.map((p) => p.name).join(", ")}`);
 
+  // Demo client with a portal login (the customer-facing app): demo@client.local / client123
+  const portalHash = demoHash("client123");
   const client = await prisma.client.upsert({
     where: { email: "demo@client.local" },
-    update: {},
-    create: { name: "Demo Client", companyName: "Demo Co", email: "demo@client.local", status: "ACTIVE" },
+    update: { portalPasswordHash: portalHash },
+    create: { name: "Demo Client", companyName: "Demo Co", email: "demo@client.local", status: "ACTIVE", portalPasswordHash: portalHash },
   });
-  console.log(`Client: ${client.name} (${client.id})`);
+  console.log(`Client: ${client.name} (${client.id}) — portal login: demo@client.local / client123`);
 
   // A demo public API key for the client (plaintext shown once here for local testing).
   const existingKey = await prisma.apiKey.findFirst({ where: { clientId: client.id } });
